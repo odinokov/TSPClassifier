@@ -103,11 +103,10 @@ Expected output:
 
 ## MiceProtein OpenML Example
 
-`MiceProtein` is a useful real-data example for TSP because it contains
-same-scale biological measurements: 77 protein or protein-modification
-features measured in mouse cerebral cortex. The target is not a known
-protein-pair list. The ground truth is the experimental class label, combining
-genotype, learning stimulation, and treatment.
+`MiceProtein` is a useful real-data example for TSP because it contains 77
+same-scale protein or protein-modification measurements from mouse cerebral
+cortex. The ground truth is the experimental class label, combining genotype,
+learning stimulation, and treatment.
 
 ```python
 import numpy as np
@@ -118,12 +117,7 @@ from sklearn.pipeline import make_pipeline
 
 from TSPClassifier import TSPClassifier
 
-mice = fetch_openml(
-    name="miceprotein",
-    version=4,
-    as_frame=True,
-    parser="auto",
-)
+mice = fetch_openml(name="miceprotein", version=4, as_frame=True, parser="auto")
 X = mice.data.to_numpy(dtype=float)
 y = mice.target.to_numpy()
 
@@ -131,7 +125,7 @@ clf = make_pipeline(
     KNNImputer(n_neighbors=5),
     TSPClassifier(
         n_pairs="auto",
-        max_pairs=9,
+        max_pairs=31,
         cv=5,
         exact_pairs=True,
         multiclass="ovo",
@@ -139,16 +133,14 @@ clf = make_pipeline(
 )
 
 outer_cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-scores = cross_val_score(clf, X, y, cv=outer_cv)
-print(scores.mean())
+print(cross_val_score(clf, X, y, cv=outer_cv).mean())
 ```
 
 On one fixed 5-fold split, this gave:
 
 | Model | Mean accuracy |
 | --- | ---: |
-| `TSPClassifier`, one-vs-rest | 0.5657 |
-| `TSPClassifier`, one-vs-one | 0.7935 |
+| `TSPClassifier`, one-vs-one | 0.7954 |
 | Logistic regression | 0.9898 |
 | RBF SVC | 0.9972 |
 | Random forest | 0.9954 |
@@ -156,24 +148,9 @@ On one fixed 5-fold split, this gave:
 
 ![MiceProtein model accuracy comparison](docs/images/miceprotein_accuracy.png)
 
-The result is a good illustration of what TSP is for. It is not the highest
-accuracy model on this dataset, but it produces compact, interpretable rules
-using protein-pair orderings. Flexible baselines can classify these experimental
-groups almost perfectly, while TSP trades some accuracy for transparent
-decision rules.
-
-For example, fitting one-vs-rest TSP with `n_pairs="auto"` selected different
-numbers of pair rules for each experimental class:
-
-![MiceProtein selected k by class](docs/images/miceprotein_selected_k.png)
-
-Representative one-vs-rest rules from the full fit include:
-
-```text
-c-CS-m: SOD1_N < pNUMB_N; ITSN1_N < pERK_N; Ubiquitin_N < CaNA_N
-t-CS-m: BRAF_N > TIAM1_N
-t-SC-s: MTOR_N < pP70S6_N; pPKCG_N > PSD95_N; AcetylH3K9_N > nNOS_N
-```
+On this dataset, flexible baselines classify the experimental groups almost
+perfectly. TSP is lower-accuracy but returns transparent protein-pair ordering
+rules instead of opaque multifeature decision boundaries.
 
 ## API
 
