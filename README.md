@@ -1,8 +1,28 @@
-# tspfs
+# TSPClassifier
 
-`tspfs` is a scikit-learn compatible implementation of Top-Scoring Pairs
+`TSPClassifier` is a scikit-learn compatible implementation of Top-Scoring Pairs
 (TSP/k-TSP) classifiers for gene expression and other high-dimensional
 biological matrices.
+
+## When To Use TSP
+
+Top-Scoring Pairs is a rule-based classifier for high-dimensional data where
+the relative order of features within each sample is informative. Instead of
+learning weights on absolute feature values, it searches for feature pairs
+`(i, j)` whose ordering, such as `x_i < x_j`, differs strongly between classes.
+A k-TSP model selects an odd number of high-scoring, non-overlapping pairs and
+predicts by majority vote across those pair rules.
+
+This makes TSP useful for gene expression, proteomics, metabolomics, NDR scores,
+and other same-scale biological matrices where simple, interpretable, robust
+within-sample comparisons are preferred over black-box models. It is especially
+appropriate when the number of features is large, the number of samples is
+modest, and absolute values may be affected by normalization or batch effects.
+
+TSP is not suitable when features are not meaningfully comparable within a
+sample, when predictive signal depends mainly on absolute magnitude rather than
+relative ordering, or when the goal is calibrated probabilities rather than
+transparent decision rules.
 
 The main estimator is `TSPClassifier`.
 
@@ -21,6 +41,12 @@ From this checkout:
 
 ```bash
 pip install .
+```
+
+From GitHub:
+
+```bash
+pip install git+https://github.com/odinokov/TSPClassifier.git
 ```
 
 For development:
@@ -45,7 +71,7 @@ pip install decoupler anndata pandas skops joblib
 
 ```python
 import numpy as np
-from tspfs import TSPClassifier
+from TSPClassifier import TSPClassifier
 
 X = np.array(
     [
@@ -75,66 +101,78 @@ Expected output:
 [6.]
 ```
 
-## Demo With `decoupler` Toy Data
+## MiceProtein OpenML Example
 
-The `decoupler` toy dataset returns an `AnnData` expression object and a
-regulatory network table. The TSP classifier only needs the expression matrix
-and a label vector.
+`MiceProtein` is a useful real-data example for TSP because it contains
+same-scale biological measurements: 77 protein or protein-modification
+features measured in mouse cerebral cortex. The target is not a known
+protein-pair list. The ground truth is the experimental class label, combining
+genotype, learning stimulation, and treatment.
 
 ```python
-# First, install the package if you haven't already:
-# pip install decoupler
-
 import numpy as np
-import decoupler as dc
-from tspfs import TSPClassifier
+from sklearn.datasets import fetch_openml
+from sklearn.impute import KNNImputer
+from sklearn.model_selection import StratifiedKFold, cross_val_score
+from sklearn.pipeline import make_pipeline
 
-# Load the toy single-cell dataset.
-# Current decoupler docs expose this as dc.ds.toy().
-adata, network = dc.ds.toy()
+from TSPClassifier import TSPClassifier
 
-print(adata)
-# AnnData object with n cells/samples and genes/features
-
-# Access the expression matrix as a pandas DataFrame.
-expression_matrix = adata.to_df()
-print(expression_matrix.head())
-
-X = expression_matrix.to_numpy(dtype=float)
-feature_names = expression_matrix.columns.to_numpy()
-```
-
-For a real project, use a phenotype, cell type, condition, response, or outcome
-label from `adata.obs`. For a minimal toy demo, create a synthetic binary label
-by splitting cells on the expression of the first gene:
-
-```python
-marker = expression_matrix.iloc[:, 0]
-y = np.where(marker > marker.median(), "marker_high", "marker_low")
-
-clf = TSPClassifier(
-    n_pairs="auto",
-    max_pairs=9,
-    cv=5,
-    exact_pairs=False,
-    max_features=512,
+mice = fetch_openml(
+    name="miceprotein",
+    version=4,
+    as_frame=True,
+    parser="auto",
 )
-clf.fit(X, y)
+X = mice.data.to_numpy(dtype=float)
+y = mice.target.to_numpy()
 
-print("selected k:", clf.k_)
-print("selected pairs:")
-for i, j in clf.pairs_:
-    print(feature_names[i], "vs", feature_names[j])
+clf = make_pipeline(
+    KNNImputer(n_neighbors=5),
+    TSPClassifier(
+        n_pairs="auto",
+        max_pairs=9,
+        cv=5,
+        exact_pairs=True,
+        multiclass="ovo",
+    ),
+)
+
+outer_cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+scores = cross_val_score(clf, X, y, cv=outer_cv)
+print(scores.mean())
 ```
 
-The `decoupler` toy data includes a `group` label. In your own data, replace
-`"group"` with the relevant phenotype, condition, response, or outcome column:
+On one fixed 5-fold split, this gave:
 
-```python
-y = adata.obs["group"].to_numpy()
+| Model | Mean accuracy |
+| --- | ---: |
+| `TSPClassifier`, one-vs-rest | 0.5657 |
+| `TSPClassifier`, one-vs-one | 0.7935 |
+| Logistic regression | 0.9898 |
+| RBF SVC | 0.9972 |
+| Random forest | 0.9954 |
+| Extra trees | 1.0000 |
 
-clf = TSPClassifier(n_pairs="auto", max_pairs=9, cv=5)
-clf.fit(X, y)
+![MiceProtein model accuracy comparison](docs/images/miceprotein_accuracy.png)
+
+The result is a good illustration of what TSP is for. It is not the highest
+accuracy model on this dataset, but it produces compact, interpretable rules
+using protein-pair orderings. Flexible baselines can classify these experimental
+groups almost perfectly, while TSP trades some accuracy for transparent
+decision rules.
+
+For example, fitting one-vs-rest TSP with `n_pairs="auto"` selected different
+numbers of pair rules for each experimental class:
+
+![MiceProtein selected k by class](docs/images/miceprotein_selected_k.png)
+
+Representative one-vs-rest rules from the full fit include:
+
+```text
+c-CS-m: SOD1_N < pNUMB_N; ITSN1_N < pERK_N; Ubiquitin_N < CaNA_N
+t-CS-m: BRAF_N > TIAM1_N
+t-SC-s: MTOR_N < pP70S6_N; pPKCG_N > PSD95_N; AcetylH3K9_N > nNOS_N
 ```
 
 ## API
@@ -276,7 +314,7 @@ Or use a scikit-learn splitter:
 
 ```python
 from sklearn.model_selection import StratifiedKFold
-from tspfs import TSPClassifier
+from TSPClassifier import TSPClassifier
 
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
@@ -317,7 +355,7 @@ For `C` classes, one-vs-one trains `C * (C - 1) / 2` binary TSP models.
 
 ```python
 from sklearn.model_selection import cross_val_score
-from tspfs import TSPClassifier
+from TSPClassifier import TSPClassifier
 
 clf = TSPClassifier(n_pairs=1, exact_pairs=True)
 scores = cross_val_score(clf, X, y, cv=5)
@@ -497,8 +535,8 @@ from pathlib import Path
 import numpy as np
 import skops.io as sio
 import sklearn
-import tspfs
-from tspfs import TSPClassifier
+import TSPClassifier as tspclassifier
+from TSPClassifier import TSPClassifier
 
 model_path = "tsp_model.skops"
 metadata_path = "tsp_model_metadata.json"
@@ -512,7 +550,7 @@ metadata = {
     "python": platform.python_version(),
     "numpy": np.__version__,
     "scikit_learn": sklearn.__version__,
-    "tspfs": tspfs.__version__,
+    "TSPClassifier": tspclassifier.__version__,
 }
 Path(metadata_path).write_text(json.dumps(metadata, indent=2))
 ```
@@ -601,7 +639,7 @@ poetry check
 Run a direct import and prediction smoke test:
 
 ```bash
-python3 -c "import numpy as np; from tspfs import TSPClassifier; X=np.array([[2.,3.,1.,4.],[2.,3.,1.,4.],[3.,2.,4.,1.],[3.,2.,4.,1.]]); y=np.array([0,0,1,1]); clf=TSPClassifier(n_pairs=1, exact_pairs=True).fit(X,y); print(clf.pairs_); print(clf.predict(X))"
+python3 -c "import numpy as np; from TSPClassifier import TSPClassifier; X=np.array([[2.,3.,1.,4.],[2.,3.,1.,4.],[3.,2.,4.,1.],[3.,2.,4.,1.]]); y=np.array([0,0,1,1]); clf=TSPClassifier(n_pairs=1, exact_pairs=True).fit(X,y); print(clf.pairs_); print(clf.predict(X))"
 ```
 
 ## References
