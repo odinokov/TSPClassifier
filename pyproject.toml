@@ -1,12 +1,12 @@
 [tool.poetry]
-name = "TSPClassifier"
+name = "tsp-classifier"
 version = "0.1.0"
 description = "A scikit-learn compatible Top-Scoring Pairs (TSP/k-TSP) classifier."
 authors = ["Denis Odinokov"]
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/odinokov/TSPClassifier"
-packages = [{ include = "TSPClassifier" }]
+repository = "https://github.com/odinokov/tsp-classifier"
+packages = [{ include = "tsp_classifier" }]
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -32,5 +32,4 @@ select = ["E", "F", "I", "N", "UP", "NPY"]
 ignore = [
     "N803",  # sklearn convention: uppercase X for feature matrices
     "N806",  # sklearn convention: uppercase X in function bodies
-    "N999",  # package name is intentionally CamelCase
 ]

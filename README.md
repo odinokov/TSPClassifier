@@ -1,8 +1,8 @@
-# TSPClassifier
+# tsp-classifier
 
-`TSPClassifier` is a scikit-learn compatible implementation of Top-Scoring Pairs
-(TSP/k-TSP) classifiers for gene expression and other high-dimensional
-biological matrices.
+`tsp-classifier` is a scikit-learn compatible implementation of Top-Scoring
+Pairs (TSP/k-TSP) classifiers for gene expression and other high-dimensional
+biological matrices. The main estimator is `TSPClassifier`.
 
 ## When To Use TSP
 
@@ -24,8 +24,6 @@ sample, when predictive signal depends mainly on absolute magnitude rather than
 relative ordering, or when the goal is calibrated probabilities rather than
 transparent decision rules.
 
-The main estimator is `TSPClassifier`.
-
 ```text
 X.shape == (n_samples, n_features)
 ```
@@ -46,7 +44,7 @@ pip install .
 From GitHub:
 
 ```bash
-pip install git+https://github.com/odinokov/TSPClassifier.git
+pip install git+https://github.com/odinokov/tsp-classifier.git
 ```
 
 For development:
@@ -61,17 +59,17 @@ Core dependencies:
 pip install numpy numba scipy scikit-learn
 ```
 
-Optional packages used in examples:
+Optional packages used in persistence examples:
 
 ```bash
-pip install decoupler anndata pandas skops joblib
+pip install skops joblib
 ```
 
 ## Quick Start
 
 ```python
 import numpy as np
-from TSPClassifier import TSPClassifier
+from tsp_classifier import TSPClassifier
 
 X = np.array(
     [
@@ -100,79 +98,6 @@ Expected output:
 [1.]
 [6.]
 ```
-
-## MiceProtein OpenML Example
-
-`MiceProtein` is a useful real-data example for TSP because it contains 77
-same-scale protein or protein-modification measurements from mouse cerebral
-cortex. The ground truth is the experimental class label, combining genotype,
-learning stimulation, and treatment.
-
-```python
-import numpy as np
-from sklearn.datasets import fetch_openml
-from sklearn.impute import KNNImputer
-from sklearn.model_selection import StratifiedKFold, cross_val_score
-from sklearn.pipeline import make_pipeline
-
-from TSPClassifier import TSPClassifier
-
-mice = fetch_openml(name="miceprotein", version=4, as_frame=True, parser="auto")
-X = mice.data.to_numpy(dtype=float)
-y = mice.target.to_numpy()
-
-clf = make_pipeline(
-    KNNImputer(n_neighbors=5),
-    TSPClassifier(
-        n_pairs="auto",
-        max_pairs=9,
-        cv=5,
-        exact_pairs=True,
-        multiclass="ovo",
-    ),
-)
-
-outer_cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-print(cross_val_score(clf, X, y, cv=outer_cv).mean())
-```
-
-For this example, `max_pairs=9` was selected by sweeping odd ceilings and
-keeping the highest mean 5-fold accuracy.
-
-```python
-sweep_scores = {}
-
-for max_pairs in range(1, 16, 2):
-    sweep_clf = make_pipeline(
-        KNNImputer(n_neighbors=5),
-        TSPClassifier(
-            n_pairs="auto",
-            max_pairs=max_pairs,
-            cv=5,
-            exact_pairs=True,
-            multiclass="ovo",
-        ),
-    )
-    score = cross_val_score(sweep_clf, X, y, cv=outer_cv).mean()
-    sweep_scores[max_pairs] = score
-
-best_max_pairs = max(sweep_scores, key=sweep_scores.get)
-print(best_max_pairs, f"{sweep_scores[best_max_pairs]:.4f}")
-```
-
-On one fixed 5-fold split, this gave:
-
-| Model | Mean accuracy |
-| --- | ---: |
-| `TSPClassifier`, one-vs-one | 0.7935 |
-| Logistic regression | 0.9898 |
-| RBF SVC | 0.9972 |
-| Random forest | 0.9944 |
-| Extra trees | 0.9991 |
-
-On this dataset, flexible baselines classify the experimental groups almost
-perfectly. TSP is lower-accuracy but returns transparent protein-pair ordering
-rules instead of opaque multifeature decision boundaries.
 
 ## API
 
@@ -299,10 +224,15 @@ print(clf.pairs_)
 
 ## Choosing k
 
-Let the model choose k by cross-validation:
+Let the model choose k by cross-validation within a ceiling. `max_pairs` is the
+largest odd k the estimator may select; it is not a universal recommended value.
+Choose the ceiling from a compute or interpretability budget, or tune it in an
+outer validation loop.
 
 ```python
-clf = TSPClassifier(n_pairs="auto", max_pairs=9, cv=5)
+k_ceiling = 9
+
+clf = TSPClassifier(n_pairs="auto", max_pairs=k_ceiling, cv=5)
 clf.fit(X_train, y_train)
 
 print("selected k:", clf.k_)
@@ -313,18 +243,22 @@ Or use a scikit-learn splitter:
 
 ```python
 from sklearn.model_selection import StratifiedKFold
-from TSPClassifier import TSPClassifier
+from tsp_classifier import TSPClassifier
 
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+k_ceiling = 9
 
 clf = TSPClassifier(
     n_pairs="auto",
-    max_pairs=9,
+    max_pairs=k_ceiling,
     cv=cv,
     exact_pairs=True,
 )
 clf.fit(X_train, y_train)
 ```
+
+For a dataset-level benchmark, tune `max_pairs` outside the estimator, then let
+`n_pairs="auto"` choose k inside each fit.
 
 ## Multiclass Classification
 
@@ -354,7 +288,7 @@ For `C` classes, one-vs-one trains `C * (C - 1) / 2` binary TSP models.
 
 ```python
 from sklearn.model_selection import cross_val_score
-from TSPClassifier import TSPClassifier
+from tsp_classifier import TSPClassifier
 
 clf = TSPClassifier(n_pairs=1, exact_pairs=True)
 scores = cross_val_score(clf, X, y, cv=5)
@@ -534,8 +468,8 @@ from pathlib import Path
 import numpy as np
 import skops.io as sio
 import sklearn
-import TSPClassifier as tspclassifier
-from TSPClassifier import TSPClassifier
+import tsp_classifier
+from tsp_classifier import TSPClassifier
 
 model_path = "tsp_model.skops"
 metadata_path = "tsp_model_metadata.json"
@@ -549,7 +483,7 @@ metadata = {
     "python": platform.python_version(),
     "numpy": np.__version__,
     "scikit_learn": sklearn.__version__,
-    "TSPClassifier": tspclassifier.__version__,
+    "tsp_classifier": tsp_classifier.__version__,
 }
 Path(metadata_path).write_text(json.dumps(metadata, indent=2))
 ```
@@ -638,16 +572,150 @@ poetry check
 Run a direct import and prediction smoke test:
 
 ```bash
-python3 -c "import numpy as np; from TSPClassifier import TSPClassifier; X=np.array([[2.,3.,1.,4.],[2.,3.,1.,4.],[3.,2.,4.,1.],[3.,2.,4.,1.]]); y=np.array([0,0,1,1]); clf=TSPClassifier(n_pairs=1, exact_pairs=True).fit(X,y); print(clf.pairs_); print(clf.predict(X))"
+python3 -c "import numpy as np; from tsp_classifier import TSPClassifier; X=np.array([[2.,3.,1.,4.],[2.,3.,1.,4.],[3.,2.,4.,1.],[3.,2.,4.,1.]]); y=np.array([0,0,1,1]); clf=TSPClassifier(n_pairs=1, exact_pairs=True).fit(X,y); print(clf.pairs_); print(clf.predict(X))"
 ```
+
+## MiceProtein OpenML Example
+
+`MiceProtein` is a useful real-data example for TSP because it contains 77
+same-scale protein or protein-modification measurements from mouse cerebral
+cortex. The ground truth is the experimental class label, combining genotype,
+learning stimulation, and treatment.
+
+```python
+from sklearn.datasets import fetch_openml
+from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
+from sklearn.impute import KNNImputer
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import StratifiedKFold, cross_val_score
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
+
+from tsp_classifier import TSPClassifier
+
+mice = fetch_openml(name="miceprotein", version=4, as_frame=True, parser="auto")
+X = mice.data.to_numpy(dtype=float)
+y = mice.target.to_numpy()
+
+clf = make_pipeline(
+    KNNImputer(n_neighbors=5),
+    TSPClassifier(
+        n_pairs="auto",
+        max_pairs=9,
+        cv=5,
+        exact_pairs=True,
+        multiclass="ovo",
+    ),
+)
+
+outer_cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+print(cross_val_score(clf, X, y, cv=outer_cv).mean())
+```
+
+For this README example, `max_pairs=9` was selected by an exploratory sweep of
+odd ceilings on the same fixed 5-fold split. Use nested cross-validation or a
+held-out test set if you need an unbiased final estimate.
+
+```python
+sweep_scores = {}
+
+for max_pairs in range(1, 16, 2):
+    sweep_clf = make_pipeline(
+        KNNImputer(n_neighbors=5),
+        TSPClassifier(
+            n_pairs="auto",
+            max_pairs=max_pairs,
+            cv=5,
+            exact_pairs=True,
+            multiclass="ovo",
+        ),
+    )
+    score = cross_val_score(sweep_clf, X, y, cv=outer_cv).mean()
+    sweep_scores[max_pairs] = score
+
+best_max_pairs = max(sweep_scores, key=sweep_scores.get)
+print(best_max_pairs, f"{sweep_scores[best_max_pairs]:.4f}")
+```
+
+The baseline rows use the same imputer and outer split:
+
+```python
+baseline_models = {
+    "Logistic regression": make_pipeline(
+        KNNImputer(n_neighbors=5),
+        StandardScaler(),
+        LogisticRegression(max_iter=5000),
+    ),
+    "RBF SVC": make_pipeline(
+        KNNImputer(n_neighbors=5),
+        StandardScaler(),
+        SVC(kernel="rbf"),
+    ),
+    "Random forest": make_pipeline(
+        KNNImputer(n_neighbors=5),
+        RandomForestClassifier(random_state=42),
+    ),
+    "Extra trees": make_pipeline(
+        KNNImputer(n_neighbors=5),
+        ExtraTreesClassifier(random_state=42),
+    ),
+}
+
+for name, model in baseline_models.items():
+    score = cross_val_score(model, X, y, cv=outer_cv).mean()
+    print(name, f"{score:.4f}")
+```
+
+This exploratory fixed-split run gave:
+
+| Model | Mean accuracy |
+| --- | ---: |
+| `TSPClassifier`, one-vs-one | 0.7935 |
+| Logistic regression | 0.9898 |
+| RBF SVC | 0.9972 |
+| Random forest | 0.9944 |
+| Extra trees | 0.9991 |
+
+Inspect the learned one-vs-one protein-pair rules after fitting the pipeline on
+the full dataset:
+
+```python
+clf.fit(X, y)
+
+tsp = clf.named_steps["tspclassifier"]
+feature_names = mice.data.columns
+
+for (negative_class, positive_class), model in zip(tsp.tasks_, tsp.estimators_):
+    print(f"\n{negative_class} vs {positive_class}")
+    print(f"selected k = {model.k}")
+
+    for rank, ((i, j), direction, delta, gamma) in enumerate(
+        zip(model.pairs, model.directions, model.delta, model.gamma),
+        start=1,
+    ):
+        protein_i = feature_names[int(i)]
+        protein_j = feature_names[int(j)]
+        operator = "<" if direction == 1 else ">"
+
+        print(
+            f"{rank:2d}. {protein_i} {operator} {protein_j} "
+            f"votes for {positive_class}; "
+            f"delta={delta:.3f}, gamma={gamma:.3f}"
+        )
+```
+
+On this dataset, flexible baselines classify the experimental groups almost
+perfectly. TSP is lower-accuracy but returns transparent protein-pair ordering
+rules instead of opaque multifeature decision boundaries.
 
 ## References
 
-- Shi, P., Ray, S., Zhu, Q., & Kon, M. A. (2011). [Top scoring pairs for feature selection in machine learning and applications to cancer outcome prediction](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-12-375). *BMC Bioinformatics*, 12, 375. https://doi.org/10.1186/1471-2105-12-375
-- Tan, A. C., Naiman, D. Q., Xu, L., Winslow, R. L., & Geman, D. (2005). [Simple decision rules for classifying human cancers from gene expression profiles](https://academic.oup.com/bioinformatics/article/21/20/3896/203010). *Bioinformatics*, 21(20), 3896-3904. https://doi.org/10.1093/bioinformatics/bti631
-- Gui, T. (2014). [A Pairwise Feature Selection Method For Gene Data Using Information Gain](https://egrove.olemiss.edu/etd/943/). M.S. thesis, University of Mississippi, Electronic Theses and Dissertations 943.
-- Bari, M. G., Salekin, S., & Zhang, J. (2017). [A Robust and Efficient Feature Selection Algorithm for Microarray Data](https://onlinelibrary.wiley.com/doi/10.1002/minf.201600099). *Molecular Informatics*, 36, 1600099. https://doi.org/10.1002/minf.201600099
-- Lin, X., Huang, X., Zhou, L., Ren, W., Zeng, J., Yao, W., & Wang, X. (2019). [The Robust Classification Model Based on Combinatorial Features](https://ieeexplore.ieee.org/document/8126830/). *IEEE/ACM Transactions on Computational Biology and Bioinformatics*, 16(2), 650-657. https://doi.org/10.1109/TCBB.2017.2779512
+- Shi, P., Ray, S., Zhu, Q., & Kon, M. A. (2011). Top scoring pairs for feature selection in machine learning and applications to cancer outcome prediction. *BMC Bioinformatics, 12*, Article 375. doi:10.1186/1471-2105-12-375.
+- Tan, A. C., Naiman, D. Q., Xu, L., Winslow, R. L., & Geman, D. (2005). Simple decision rules for classifying human cancers from gene expression profiles. *Bioinformatics, 21*(20), 3896–3904. doi:10.1093/bioinformatics/bti631.
+- Bari, M. G., Salekin, S., & Zhang, J. M. (2017). A robust and efficient feature selection algorithm for microarray data. *Molecular Informatics, 36*(4), Article 1600099. doi:10.1002/minf.201600099.
+- Lin, X., Huang, X., Zhou, L., Ren, W., Zeng, J., Yao, W., & Wang, X. (2019). The robust classification model based on combinatorial features. *IEEE/ACM Transactions on Computational Biology and Bioinformatics, 16*(2), 650–657. doi:10.1109/TCBB.2017.2779512.
+- Wu, C., Xie, X., Yang, X., Du, M., Lin, H., & Huang, J. (2025). Applications of gene pair methods in clinical research: Advancing precision medicine. *Molecular Biomedicine, 6*(1), Article 22. doi:10.1186/s43556-025-00263-w.
 
 ## License
 
